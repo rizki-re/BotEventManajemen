@@ -1,0 +1,547 @@
+"""
+app.py — Entry point EventBot Streamlit
+Jalankan: streamlit run app.py
+"""
+import copy
+import streamlit as st
+
+# ── Page config (MUST be first Streamlit call) ────────────────────────────────
+st.set_page_config(
+    page_title="EventBot — Platform Event & Konferensi",
+    page_icon="🎪",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+from fsm import (
+    DEFAULT_EVENTS, STATS, FEATURES, STEPS, FAQ,
+    format_price, quota_pct, is_full, State, FSM, STATE_META
+)
+from engine import fsm_step, keyword_fallback
+
+# ─────────────────────────────────────────────
+#  INJEKSI CSS & FONTS (Dari styles.py)
+# ─────────────────────────────────────────────
+GOOGLE_FONTS = """
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+"""
+
+BASE_CSS = """
+<style>
+/* ═══════════════════════════════════════════
+   GLOBAL RESET & VARIABLES
+═══════════════════════════════════════════ */
+:root {
+  --primary:       #7c5ce0;
+  --primary-light: #a78bfa;
+  --primary-dark:  #4c1d95;
+  --accent:        #e879f9;
+  --accent2:       #06b6d4;
+  --bg-dark:       #0d0a1a;
+  --bg-card:       #18122b;
+  --bg-card2:      #1e1535;
+  --surface:       #241a3d;
+  --border:        #2d2050;
+  --border-light:  #3d2f6b;
+  --text-primary:  #f0ecfc;
+  --text-secondary:#b09cd4;
+  --text-muted:    #7460a8;
+  --success:       #10b981;
+  --warning:       #f59e0b;
+  --danger:        #ef4444;
+  --radius:        12px;
+  --radius-lg:     20px;
+  --gradient-btn:  linear-gradient(135deg, #7c5ce0, #a855f7);
+  --gradient-accent: linear-gradient(135deg, #e879f9, #7c5ce0);
+}
+
+/* ── Streamlit shell overrides ── */
+html, body, [data-testid="stAppViewContainer"] {
+  background-color: var(--bg-dark) !important;
+  font-family: 'DM Sans', sans-serif !important;
+  color: var(--text-primary) !important;
+}
+[data-testid="stHeader"]          { background: transparent !important; }
+[data-testid="stSidebar"]         { background: var(--bg-card) !important; border-right: 1px solid var(--border); }
+[data-testid="stSidebarContent"]  { padding-top: 1.5rem; }
+section[data-testid="stMain"]     { background: var(--bg-dark) !important; }
+
+/* hide streamlit branding — keep header visible so sidebar toggle works */
+#MainMenu, footer { visibility: hidden; }
+
+/* style the header bar to match dark theme */
+[data-testid="stHeader"] {
+  background: var(--bg-dark) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* top navbar styling */
+.top-navbar {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0 14px 0; flex-wrap: wrap;
+}
+.top-navbar a, .top-navbar button {
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  color: #b09cd4; font-size: .88rem; padding: 7px 14px; cursor: pointer;
+  text-decoration: none; transition: background .2s, color .2s;
+}
+.top-navbar a:hover, .top-navbar button:hover {
+  background: rgba(124,92,224,0.12); color: #f0ecfc; border-color: rgba(124,92,224,0.25);
+}
+.top-navbar .nav-active {
+  background: rgba(124,92,224,0.2) !important; color: #f0ecfc !important;
+  border-color: rgba(124,92,224,0.45) !important; font-weight: 600;
+}
+
+/* scrollbar */
+::-webkit-scrollbar       { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-dark); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 10px; }
+
+/* ═══════════════════════════════════════════
+   TYPOGRAPHY HELPERS
+═══════════════════════════════════════════ */
+.eb-syne    { font-family: 'Syne', sans-serif; }
+.eb-muted   { color: var(--text-muted); }
+.eb-secondary { color: var(--text-secondary); }
+
+/* ─── HERO ─────────────────────────────── */
+.hero-section {
+  min-height: 92vh; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; padding: 3rem 1rem 2rem;
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(124,92,224,0.15); border: 1px solid rgba(124,92,224,0.35);
+  border-radius: 30px; padding: 7px 20px; font-size: 0.82rem;
+  color: var(--primary-light); margin-bottom: 1.8rem; animation: fadeUp .5s ease both;
+}
+.badge-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--primary-light);
+  display: inline-block; animation: pulse 2s infinite;
+}
+.hero-title {
+  font-family: 'Syne', sans-serif; font-size: clamp(2.2rem, 6vw, 4.2rem);
+  font-weight: 800; line-height: 1.1; color: var(--text-primary); margin-bottom: 1.2rem;
+  animation: fadeUp .5s ease .1s both;
+}
+.hero-title span {
+  background: var(--gradient-accent); -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent; background-clip: text;
+}
+.hero-sub {
+  max-width: 560px; font-size: 1rem; line-height: 1.7; color: var(--text-secondary);
+  margin: 0 auto 2rem; animation: fadeUp .5s ease .2s both;
+}
+
+/* ─── STAT GRID ─────────────────────────── */
+.stat-grid {
+  display: flex; gap: 2.5rem; flex-wrap: wrap; justify-content: center;
+  margin-top: 2.5rem; animation: fadeUp .5s ease .3s both;
+}
+.stat-item { text-align: center; }
+.stat-num  { font-family: 'Syne', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--text-primary); }
+.stat-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+
+/* ─── BUTTONS ───────────────────────────── */
+.eb-btn-primary {
+  background: var(--gradient-btn); color: #fff !important; padding: 12px 28px;
+  border-radius: 30px; font-size: 0.9rem; font-weight: 500; border: none; cursor: pointer;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+  transition: transform .2s, box-shadow .2s; box-shadow: 0 4px 20px rgba(124,92,224,0.4);
+}
+.eb-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124,92,224,0.55); }
+
+/* ─── SECTION TAGS & TITLES ────────────── */
+.section-tag {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 0.75rem;
+  font-weight: 500; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--primary-light); margin-bottom: .6rem;
+}
+.section-tag::before { content: ''; display: block; width: 20px; height: 2px; background: var(--primary-light); border-radius: 2px; }
+.section-title { font-family: 'Syne', sans-serif; font-size: clamp(1.6rem, 3.5vw, 2.5rem); font-weight: 700; color: var(--text-primary); margin-bottom: .8rem; line-height: 1.2; }
+.section-sub { font-size: .95rem; color: var(--text-secondary); max-width: 540px; line-height: 1.6; margin-bottom: 2rem; }
+.section-divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+/* ─── FEATURE CARDS ─────────────────────── */
+.feat-card {
+  background: linear-gradient(145deg, #18122b, #1e1535); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px; height: 100%; transition: transform .25s, border-color .25s, box-shadow .25s;
+}
+.feat-card:hover { transform: translateY(-4px); border-color: var(--border-light); box-shadow: 0 4px 32px rgba(124,92,224,0.12); }
+.feat-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; margin-bottom: 14px; }
+.fi-purple { background: rgba(124,92,224,0.15); }
+.fi-pink   { background: rgba(232,121,249,0.15); }
+.fi-cyan   { background: rgba(6,182,212,0.15); }
+.fi-green  { background: rgba(16,185,129,0.15); }
+.fi-amber  { background: rgba(245,158,11,0.15); }
+.fi-red    { background: rgba(239,68,68,0.15); }
+.feat-title { font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.feat-desc { font-size: .85rem; color: var(--text-secondary); line-height: 1.6; }
+
+/* ─── EVENT CARDS ───────────────────────── */
+.event-card {
+  background: var(--bg-card2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; transition: transform .25s, box-shadow .25s; height: 100%; display: flex; flex-direction: column;
+}
+.event-card:hover { transform: translateY(-4px); box-shadow: 0 4px 32px rgba(124,92,224,0.12); }
+.event-banner { height: 96px; display: flex; align-items: center; justify-content: center; position: relative; font-size: 2.4rem; }
+.event-type-badge { position: absolute; top: 10px; right: 12px; font-size: .68rem; background: rgba(0,0,0,.4); padding: 3px 10px; border-radius: 20px; color: #fff; }
+.event-body { padding: 16px; flex: 1; }
+.event-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.badge { padding: 3px 10px; border-radius: 20px; font-size: .68rem; font-weight: 500; }
+.badge-free   { background: rgba(16,185,129,0.15); color: #34d399; }
+.badge-paid   { background: rgba(245,158,11,0.15);  color: #fbbf24; }
+.badge-cat    { background: rgba(124,92,224,0.15);   color: var(--primary-light); }
+.badge-full   { background: rgba(239,68,68,0.15);    color: #f87171; }
+.badge-online { background: rgba(6,182,212,0.15);    color: #22d3ee; }
+.event-title { font-family: 'Syne', sans-serif; font-size: .95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+.event-meta  { font-size: .78rem; color: var(--text-muted); line-height: 1.9; }
+.event-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.event-price { font-family: 'Syne', sans-serif; font-weight: 700; color: var(--primary-light); font-size: .9rem; }
+.quota-bar  { height: 5px; background: var(--surface); border-radius: 3px; overflow: hidden; margin: 8px 0 3px; }
+.quota-fill { height: 100%; border-radius: 3px; background: var(--gradient-btn); }
+.quota-txt  { font-size: .7rem; color: var(--text-muted); }
+
+/* ─── CHATBOT PANEL ─────────────────────── */
+.chat-header { background: var(--gradient-btn); padding: 16px 20px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; display: flex; align-items: center; gap: 12px; }
+.chat-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+.chat-name   { font-family: 'Syne', sans-serif; font-size: .9rem; font-weight: 700; color: #fff; }
+.online-dot  { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; color: rgba(255,255,255,.8); }
+.online-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 6px #34d399; }
+.chat-window { background: var(--bg-card); border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg); padding: 16px; min-height: 420px; max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+
+/* ─── STATE BADGE ───────────────────────── */
+.state-bar { padding: 6px 14px; background: var(--bg-card); border: 1px solid var(--border); border-top: none; display: flex; align-items: center; gap: 8px; font-size: .7rem; color: var(--text-muted); border-radius: 0 0 var(--radius) var(--radius); }
+.state-pill { padding: 3px 10px; border-radius: 20px; font-size: .68rem; font-weight: 700; letter-spacing: .05em; }
+
+/* ─── STEP / HOW-TO ROW ─────────────────── */
+.steps-row   { display: flex; gap: 0; flex-wrap: wrap; justify-content: center; }
+.step-item   { flex: 1; min-width: 140px; text-align: center; padding: 0 14px; }
+.step-num    { width: 50px; height: 50px; border-radius: 50%; background: var(--gradient-btn); display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-weight: 800; font-size: .82rem; color: #fff; margin: 0 auto 12px; box-shadow: 0 0 20px rgba(124,92,224,0.4); }
+.step-icon  { font-size: 1.4rem; margin-bottom: 10px; }
+.step-label { font-family: 'Syne', sans-serif; font-weight: 600; font-size: .85rem; color: var(--text-primary); margin-bottom: 4px; }
+.step-desc  { font-size: .76rem; color: var(--text-muted); line-height: 1.5; }
+
+/* ─── FAQ ───────────────────────────────── */
+.faq-card { background: linear-gradient(145deg, #18122b, #1e1535); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 22px; cursor: pointer; transition: border-color .2s; }
+.faq-card:hover { border-color: var(--border-light); }
+.faq-q { font-size: .9rem; font-weight: 600; color: var(--text-primary); }
+.faq-a { font-size: .84rem; color: var(--text-secondary); line-height: 1.6; margin-top: 10px; }
+
+/* ─── CTA SECTION ───────────────────────── */
+.cta-section { background: linear-gradient(135deg, rgba(76,29,149,.4) 0%, rgba(124,92,224,.2) 100%); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; padding: 60px 20px; }
+.cta-title { font-family: 'Syne', sans-serif; font-size: clamp(1.6rem,4vw,2.8rem); font-weight: 800; color: var(--text-primary); margin-bottom: .8rem; }
+.cta-sub   { font-size: 1rem; color: var(--text-secondary); margin-bottom: 2rem; }
+
+/* ─── SIDEBAR NAV ───────────────────────── */
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; cursor: pointer; transition: background .2s; margin-bottom: 4px; color: var(--text-secondary); font-size: .9rem; }
+.nav-item:hover, .nav-item.active { background: rgba(124,92,224,0.15); color: var(--text-primary); }
+
+/* ─── STREAMLIT WIDGET THEMING ──────────── */
+.stButton > button { background: var(--gradient-btn) !important; color: #fff !important; border: none !important; border-radius: 30px !important; font-size: .875rem !important; font-weight: 500 !important; padding: 10px 24px !important; transition: opacity .2s, transform .2s !important; }
+.stButton > button:hover { opacity: .85 !important; transform: translateY(-1px) !important; }
+.stTextInput > div > div > input { background: var(--surface) !important; color: var(--text-primary) !important; border: 1px solid var(--border-light) !important; border-radius: 24px !important; padding: 10px 18px !important; }
+.stTextInput > div > div > input:focus { border-color: var(--primary) !important; box-shadow: 0 0 0 2px rgba(124,92,224,.25) !important; }
+
+/* ─── FOOTER ────────────────────────────── */
+.eb-footer { text-align: center; padding: 30px 20px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: .8rem; }
+.eb-footer strong { color: var(--primary-light); }
+
+/* ─── ANIMATIONS ────────────────────────── */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(1.3); } }
+</style>
+"""
+
+def inject_styles():
+    st.markdown(GOOGLE_FONTS + BASE_CSS, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
+#  KOMPONEN UI (Dari components.py)
+# ─────────────────────────────────────────────
+def render_sidebar():
+    with st.sidebar:
+        st.markdown(
+            """
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem">
+              <div style="width:38px;height:38px;border-radius:10px;
+                          background:linear-gradient(135deg,#7c5ce0,#a855f7);
+                          display:flex;align-items:center;justify-content:center;font-size:1.1rem">🎪</div>
+              <span style="font-family:'Syne',sans-serif;font-weight:700;
+                           font-size:1.2rem;color:#f0ecfc">EventBot</span>
+            </div>
+            """, unsafe_allow_html=True
+        )
+
+        pages = [("🏠", "Beranda", "home"), ("✨", "Fitur", "features"),
+                 ("📅", "Event", "events"), ("💬", "Chatbot", "chatbot"), ("❓", "FAQ", "faq")]
+        current = st.session_state.get("page", "home")
+
+        st.markdown("""
+        <style>
+        [data-testid="stSidebar"] .stButton > button { background: transparent !important; color: #b09cd4 !important; border: 1px solid transparent !important; border-radius: 10px !important; text-align: left !important; padding: 10px 14px !important; font-size: .9rem !important; box-shadow: none !important; transition: background .2s, color .2s !important; }
+        [data-testid="stSidebar"] .stButton > button:hover { background: rgba(124,92,224,0.12) !important; color: #f0ecfc !important; border-color: rgba(124,92,224,0.25) !important; transform: none !important; }
+        [data-testid="stSidebar"] div:has(> div > button[kind="secondary"]) button { background: rgba(124,92,224,0.2) !important; color: #f0ecfc !important; border-color: rgba(124,92,224,0.45) !important; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        for icon, label, key in pages:
+            is_active = current == key
+            if is_active:
+                st.markdown(
+                    f"""<div style="background:rgba(124,92,224,0.18);border:1px solid rgba(124,92,224,0.4);border-radius:10px;padding:10px 14px;margin-bottom:4px;cursor:default;display:flex;align-items:center;gap:8px;">
+                        <span>{icon}</span><span style="font-size:.9rem;font-weight:600;color:#f0ecfc;">{label}</span>
+                        <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#a78bfa;"></span>
+                    </div>""", unsafe_allow_html=True)
+            else:
+                if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True):
+                    st.session_state.page = key
+                    st.rerun()
+
+        st.markdown("<hr style='border-color:#2d2050;margin:1.2rem 0'>", unsafe_allow_html=True)
+
+        if current == "chatbot" and "fsm" in st.session_state:
+            fsm = st.session_state.fsm
+            if fsm.registrations:
+                st.markdown("<p style='font-size:.72rem;color:#7460a8;margin-bottom:.5rem;'>🎫 PENDAFTARAN AKTIF</p>", unsafe_allow_html=True)
+                for code, reg in fsm.registrations.items():
+                    st.markdown(
+                        f"<div style='background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:.75rem;'>"
+                        f"<strong style='color:#34d399'>{code}</strong><br><span style='color:#b09cd4'>{reg['name']}</span><br>"
+                        f"<span style='color:#7460a8'>{reg['event']['title'][:30]}...</span></div>", unsafe_allow_html=True)
+            
+            emoji, color = STATE_META.get(fsm.state, ("⚪", "#888"))
+            st.markdown(
+                f"<div style='background:rgba(36,26,61,.8);border:1px solid #2d2050;border-radius:8px;padding:8px 12px;margin-top:8px;'>"
+                f"<span style='font-size:.68rem;color:#7460a8;'>FSM STATE</span><br>"
+                f"<span style='font-size:.8rem;font-weight:600;color:{color};'>{emoji} {fsm.state.value}</span></div>", unsafe_allow_html=True)
+
+        st.markdown("<p style='font-size:.68rem;color:#7460a8;text-align:center;margin-top:1rem'>Powered by FSM &amp; Kata Kunci</p>", unsafe_allow_html=True)
+
+def render_topnav():
+    pages = [("🏠", "Beranda", "home"), ("✨", "Fitur", "features"), ("📅", "Event", "events"), ("💬", "Chatbot", "chatbot"), ("❓", "FAQ", "faq")]
+    current = st.session_state.get("page", "home")
+    cols = st.columns([1, 1, 1, 1, 1, 3])
+    for col, (icon, label, key) in zip(cols, pages):
+        with col:
+            is_active = current == key
+            css_class = "nav-active" if is_active else ""
+            btn_label = f"{icon} {label}"
+            if is_active:
+                st.markdown(f'<div class="top-navbar"><span class="{css_class}" style="background:rgba(124,92,224,0.2);color:#f0ecfc;border:1px solid rgba(124,92,224,0.45);border-radius:8px;padding:7px 14px;font-size:.88rem;font-weight:600;display:inline-block;">{btn_label}</span></div>', unsafe_allow_html=True)
+            else:
+                if st.button(btn_label, key=f"topnav_{key}", use_container_width=True):
+                    st.session_state.page = key
+                    st.rerun()
+    st.markdown("<hr style='border-color:#2d2050;margin:0 0 1rem 0'>", unsafe_allow_html=True)
+
+def render_hero():
+    st.markdown(
+        """
+        <div class="hero-section">
+          <div class="hero-badge"><span class="badge-dot"></span>Platform Manajemen Event &amp; Konferensi Modern</div>
+          <h1 class="hero-title">Event Management<br><span>Chatbot</span></h1>
+          <p class="hero-sub">Kelola dan daftarkan diri ke berbagai seminar, workshop, dan konferensi dengan mudah melalui chatbot interaktif berbasis <strong style="color:#f0ecfc">Finite State Automata</strong> yang diperkuat <strong style="color:#f0ecfc">AI</strong>.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c2:
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("🤖 Mulai Chat", key="hero_chat", use_container_width=True):
+                st.session_state.page = "chatbot"
+                st.rerun()
+        with col_b:
+            if st.button("📅 Lihat Event", key="hero_event", use_container_width=True):
+                st.session_state.page = "events"
+                st.rerun()
+
+    cols = st.columns(len(STATS))
+    for col, stat in zip(cols, STATS):
+        with col:
+            st.markdown(f'<div class="stat-item"><div class="stat-num">{stat["num"]}</div><div class="stat-label">{stat["label"]}</div></div>', unsafe_allow_html=True)
+
+def render_features():
+    st.markdown('<div class="section-tag">Fitur Utama</div><h2 class="section-title">Semua yang Anda Butuhkan</h2><p class="section-sub">Ditenagai logika FSM + AI — percakapan terarah sekaligus cerdas dan natural.</p>', unsafe_allow_html=True)
+    COLOR_CLASS = {"purple":"fi-purple","pink":"fi-pink","cyan":"fi-cyan","green":"fi-green","amber":"fi-amber","red":"fi-red"}
+    for row_start in range(0, len(FEATURES), 3):
+        row  = FEATURES[row_start:row_start+3]
+        cols = st.columns(len(row))
+        for col, feat in zip(cols, row):
+            cc = COLOR_CLASS.get(feat["color"], "fi-purple")
+            with col:
+                st.markdown(f'<div class="feat-card"><div class="feat-icon {cc}">{feat["icon"]}</div><div class="feat-title">{feat["title"]}</div><p class="feat-desc">{feat["desc"]}</p></div>', unsafe_allow_html=True)
+
+def render_event_card(ev: dict, col, idx: int):
+    pct = quota_pct(ev)
+    full = is_full(ev)
+    harga = format_price(ev["price"])
+    badges = '<span class="badge badge-free">FREE</span>' if ev["free"] else '<span class="badge badge-paid">BERBAYAR</span>'
+    if full: badges += '<span class="badge badge-full">PENUH</span>'
+    badges += f'<span class="badge badge-cat">{ev["category"]}</span>'
+    if ev["type"] == "Online": badges += '<span class="badge badge-online">Online</span>'
+
+    with col:
+        st.markdown(
+            f'<div class="event-card"><div class="event-banner" style="background:{ev["color"]}"><span style="font-size:2.3rem">{ev["emoji"]}</span><span class="event-type-badge">{ev["type"]}</span></div>'
+            f'<div class="event-body"><div class="event-badges">{badges}</div><div class="event-title">{ev["title"]}</div>'
+            f'<div class="event-meta"><span>📅 {ev["date"]}</span><br><span>🕐 {ev["time"]}</span><br><span>📍 {ev["location"]}</span></div>'
+            f'<div class="quota-bar"><div class="quota-fill" style="width:{pct}%"></div></div><div class="quota-txt">{ev["registered"]}/{ev["quota"]} peserta ({pct}%)</div></div>'
+            f'<div class="event-footer"><span class="event-price">{harga}</span></div></div>', unsafe_allow_html=True)
+        label = "❌ Event Penuh" if full else "✍️ Daftar Sekarang"
+        if st.button(label, key=f"daftar_{ev['id']}", disabled=full, use_container_width=True):
+            st.session_state.page = "chatbot"
+            st.session_state.pending_event_idx = idx
+            st.rerun()
+
+def render_events_grid(events: list[dict]):
+    st.markdown('<div class="section-tag">Daftar Event</div><h2 class="section-title">Event yang Tersedia</h2><p class="section-sub">Pilih event sesuai minat Anda. Daftar langsung via chatbot.</p>', unsafe_allow_html=True)
+    for row_start in range(0, len(events), 3):
+        row_events = events[row_start:row_start+3]
+        cols = st.columns(len(row_events))
+        for col, (ev, i) in zip(cols, [(e, row_start+j+1) for j, e in enumerate(row_events)]):
+            render_event_card(ev, col, i)
+
+def _init_chat():
+    if "fsm" not in st.session_state: st.session_state.fsm = FSM()
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [("bot", "👋 Halo! Saya **EventBot**, asisten untuk manajemen event & konferensi.\n\nSaya bisa membantu Anda:\n- 📋 Cari dan lihat semua event tersedia\n- ✍️ Daftar ke event pilihan Anda\n- 🔍 Cek status pendaftaran\n- ❌ Batalkan pendaftaran\n- 💬 Tanya tentang harga, jadwal, lokasi, dan rekomendasi event!\n\nKetik apa saja atau klik tombol di bawah untuk mulai 😊")]
+        st.session_state.chat_chips = ["Lihat Event", "Cek Status", "Batal Pendaftaran"]
+
+def _send(text: str):
+    if not text.strip(): return
+    fsm = st.session_state.fsm
+    events = st.session_state.events
+    history = st.session_state.chat_history
+    history.append(("user", text))
+    resp, chips, needs_fallback = fsm_step(fsm, text, events)
+    if needs_fallback or not resp:
+        resp = keyword_fallback(text, events)
+    history.append(("bot", resp))
+    st.session_state.chat_chips = chips
+
+def render_chatbot_page():
+    _init_chat()
+    if "pending_event_idx" in st.session_state:
+        idx = st.session_state.pop("pending_event_idx")
+        if st.session_state.fsm.state == State.IDLE: _send("lihat event")
+        _send(str(idx))
+
+    left, right = st.columns([1, 1.6], gap="large")
+    with left:
+        st.markdown('<div class="section-tag">Chatbot Interaktif</div><h2 class="section-title">Tanya Apa Saja!</h2><p class="section-sub">EventBot berbasis kata kunci — bisa menjawab pertanyaan seputar event, beri rekomendasi, dan bantu pendaftaran.</p>', unsafe_allow_html=True)
+        features_info = [("🔑", "Kata Kunci Pintar", "Ketik 'harga', 'jadwal', 'lokasi', atau 'rekomendasi' dan EventBot langsung menjawab!"), ("📋", "Lihat Semua Event", "Ketik 'lihat event' untuk daftar lengkap dengan detail harga dan kuota."), ("✍️", "Panduan Pendaftaran", "Bot memandu step-by-step: nama → email → HP → konfirmasi → kode registrasi."), ("🎫", "Kode Registrasi Instan", "Dapat kode EVT-XXXXX langsung setelah konfirmasi pendaftaran."), ("🔍", "Cek & Kelola Pendaftaran", "Cek status atau batalkan kapan saja menggunakan kode registrasi.")]
+        for icon, title, desc in features_info:
+            st.markdown(f'<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;margin-bottom:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius)"><div style="width:34px;height:34px;border-radius:9px;background:rgba(124,92,224,0.15);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">{icon}</div><div><div style="font-size:.85rem;font-weight:600;color:#f0ecfc;margin-bottom:2px">{title}</div><div style="font-size:.76rem;color:#b09cd4;line-height:1.45">{desc}</div></div></div>', unsafe_allow_html=True)
+
+    with right:
+        st.markdown('<div class="chat-header"><div class="chat-avatar">🤖</div><div><div class="chat-name">EventBot</div><span class="online-dot">Online · Aktif</span></div></div>', unsafe_allow_html=True)
+        chat_container = st.container(height=440, border=False)
+        with chat_container:
+            for role, text in st.session_state.chat_history:
+                av = "🤖" if role == "bot" else "👤"
+                with st.chat_message("assistant" if role == "bot" else "user", avatar=av): st.markdown(text)
+
+        fsm = st.session_state.fsm
+        emoji, color = STATE_META.get(fsm.state, ("⚪", "#888"))
+        st.markdown(f'<div class="state-bar">FSM State:&nbsp;<span class="state-pill" style="background:rgba(128,128,128,.12);color:{color};">{emoji} {fsm.state.value}</span></div>', unsafe_allow_html=True)
+
+        chips = st.session_state.get("chat_chips", [])
+        if chips:
+            visible_chips = chips[:5]
+            cols = st.columns(len(visible_chips))
+            for col, chip in zip(cols, visible_chips):
+                with col:
+                    if st.button(chip, key=f"chip_{chip}_{len(st.session_state.chat_history)}", use_container_width=True):
+                        _send(chip)
+                        st.rerun()
+
+        if prompt := st.chat_input("Ketik apa saja..."):
+            _send(prompt)
+            st.rerun()
+
+        if st.button("🔄 Reset Chat", key="btn_reset_chat"):
+            st.session_state.pop("fsm", None)
+            st.session_state.pop("chat_history", None)
+            st.session_state.pop("chat_chips", None)
+            st.rerun()
+
+def render_how_it_works():
+    st.markdown('<div style="text-align:center"><div class="section-tag" style="justify-content:center">Cara Penggunaan</div><h2 class="section-title">5 Langkah Mudah</h2><p class="section-sub" style="margin:0 auto 2rem">Ikuti langkah berikut untuk mulai menggunakan EventBot.</p></div>', unsafe_allow_html=True)
+    cols = st.columns(len(STEPS))
+    for col, step in zip(cols, STEPS):
+        with col: st.markdown(f'<div class="step-item"><div class="step-num">{step["num"]}</div><div class="step-icon">{step["icon"]}</div><div class="step-label">{step["label"]}</div><div class="step-desc">{step["desc"]}</div></div>', unsafe_allow_html=True)
+
+def render_faq():
+    st.markdown('<div class="section-tag">FAQ</div><h2 class="section-title">Pertanyaan Umum</h2>', unsafe_allow_html=True)
+    for item in FAQ:
+        with st.expander(item["q"]): st.markdown(f'<p style="font-size:.875rem;color:#b09cd4;line-height:1.6">{item["a"]}</p>', unsafe_allow_html=True)
+
+def render_cta():
+    st.markdown('<div class="cta-section"><p class="cta-title">Siap Mencoba EventBot?</p><p class="cta-sub">Mulai gunakan EventBot sekarang dan rasakan kemudahan mendaftar event favorit Anda.</p></div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([2, 1, 2])
+    with c2:
+        if st.button("🚀 Mulai Sekarang", key="cta_btn", use_container_width=True):
+            st.session_state.page = "chatbot"
+            st.rerun()
+
+def render_footer():
+    st.markdown('<div class="eb-footer"><p>© 2025 <strong>EventBot</strong> — Platform Manajemen Event &amp; Konferensi | Dibangun dengan ❤️ menggunakan FSM &amp; Kata Kunci</p><p style="margin-top:4px;font-size:.72rem">Sistem Chatbot FSM berbasis kata kunci untuk manajemen event dan konferensi</p></div>', unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+#  ROUTING / ENTRY POINT
+# ─────────────────────────────────────────────
+inject_styles()
+
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+if "events" not in st.session_state:
+    st.session_state.events = copy.deepcopy(DEFAULT_EVENTS)
+
+render_sidebar()
+render_topnav()
+
+page = st.session_state.get("page", "home")
+
+if page == "home":
+    render_hero()
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    with st.container(): render_features()
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    with st.container(): render_events_grid(st.session_state.events)
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    with st.container(): render_how_it_works()
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    with st.container(): render_cta()
+    render_footer()
+
+elif page == "features":
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_features()
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    render_how_it_works()
+    render_footer()
+
+elif page == "events":
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_events_grid(st.session_state.events)
+    render_footer()
+
+elif page == "chatbot":
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_chatbot_page()
+    render_footer()
+
+elif page == "faq":
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_faq()
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    render_cta()
+    render_footer()
+
+else:
+    st.session_state.page = "home"
+    st.rerun()
