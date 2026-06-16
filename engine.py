@@ -12,31 +12,24 @@ from fsm import State, FSM, get_event_by_index, format_price, quota_pct, is_full
 def _low(t: str) -> str: return t.lower().strip()
 
 def _is_greeting(t): 
-    # Tambahan: sapaan muslim, waktu, slang (p, tes, yo)
     return bool(re.search(r"\b(halo|hai|hi|hello|hey|mulai|start|apa kabar|p|tes|test|assalamualaikum|pagi|siang|sore|malam|yo|cuy)\b", t))
 
 def _is_browse(t):   
-    # Tambahan: join, cari, jadwal, acara, ikutan, dll
     return bool(re.search(r"\b(lihat|event|daftar|semua|list|tampil|show|pilih|cari|jadwal|acara|ikutan|join|seminar|workshop)\b", t))
 
 def _is_status(t):   
-    # Tambahan: lacak, tiket saya, pantau
     return bool(re.search(r"\b(cek|status|check|periksa|kode|lacak|tiket|pantau)\b", t))
 
 def _is_cancel(t):   
-    # Tambahan: gajadi, mundur, refund, urung
     return bool(re.search(r"\b(batal|cancel|hapus|batalkan|gajadi|nggak jadi|ga jadi|mundur|refund|urungkan)\b", t))
 
 def _is_back(t):     
-    # Tambahan: home, awal, beranda, reset
     return bool(re.search(r"\b(kembali|menu|back|keluar|main menu|awal|beranda|home|reset|ulang)\b", t))
 
 def _is_yes(t):      
-    # Tambahan: gas, yoi, betul, bener, boleh
     return bool(re.search(r"\b(ya|yes|oke|ok|yap|iya|konfirmasi|yakin|setuju|lanjut|betul|bener|yoi|yup|gas|boleh)\b", t))
 
 def _is_no(t):       
-    # Tambahan: nggak, ndak, kagak, ngga
     return bool(re.search(r"\b(tidak|no|nope|ga|gak|jangan|batal|nggak|ndak|kagak|ngga)\b", t))
 
 def _is_valid_email(t): 
@@ -50,6 +43,217 @@ def _is_reg_code(t):
 
 def _gen_code() -> str:
     return "EVT-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+
+
+# ──────────────────────────────────────────────
+#  TOPIC MAP — Peta Intent Pengguna ke Tag Kategori
+#  Setiap topik berisi: (kata kunci trigger, tag pencarian di event)
+# ──────────────────────────────────────────────
+TOPIC_MAP = [
+    # ── Desain & UI/UX ──────────────────────────────────────────────
+    {
+        "label": "Desain & UI/UX",
+        "emoji": "🎨",
+        "triggers": [
+            "ui", "ux", "ui/ux", "user interface", "user experience",
+            "desain", "design", "figma", "prototype", "wireframe", "mockup",
+            "belajar desain", "mau desain", "tertarik desain", "ingin desain",
+            "visual", "kreatif", "grafis", "graphic", "adobe", "canva",
+            "interface", "interaksi", "hci", "human computer", "product design",
+            "design thinking", "ux research", "usability", "accessibility",
+        ],
+        "tags": ["desain", "ui", "ux", "design", "visual", "grafis", "kreatif"],
+    },
+    # ── Programming & Coding ─────────────────────────────────────────
+    {
+        "label": "Programming & Coding",
+        "emoji": "💻",
+        "triggers": [
+            "coding", "code", "ngoding", "koding", "programmer", "programming",
+            "developer", "dev", "belajar coding", "mau coding", "ingin coding",
+            "python", "javascript", "java", "php", "golang", "flutter", "kotlin",
+            "android", "ios", "mobile", "web", "backend", "frontend", "fullstack",
+            "pemrograman", "aplikasi", "app", "software", "buat aplikasi",
+            "belajar python", "belajar javascript", "belajar web", "html", "css",
+            "react", "vue", "nodejs", "laravel", "django", "spring", "rust", "c++",
+        ],
+        "tags": ["programming", "coding", "developer", "software", "web", "mobile", "python", "javascript"],
+    },
+    # ── Data & AI/ML ─────────────────────────────────────────────────
+    {
+        "label": "Data Science & AI",
+        "emoji": "📊",
+        "triggers": [
+            "data", "data science", "machine learning", "ml", "ai", "artificial intelligence",
+            "deep learning", "neural", "analisis data", "analitik", "analytics",
+            "belajar data", "mau data", "ingin data", "dataset",
+            "sql", "database", "big data", "hadoop", "spark", "tableau",
+            "statistik", "statistika", "model prediksi", "nlp", "computer vision",
+            "chatgpt", "llm", "generative ai", "tensorflow", "pytorch", "scikit",
+            "r programming", "data engineer", "data analyst","belajar", "business intelligence",
+        ],
+        "tags": ["data", "machine learning", "ai", "analitik", "sql", "statistik"],
+    },
+    # ── Bisnis & Kewirausahaan ───────────────────────────────────────
+    {
+        "label": "Bisnis & Kewirausahaan",
+        "emoji": "💼",
+        "triggers": [
+            "bisnis", "business", "wirausaha", "entrepreneur", "startup",
+            "jualan", "jual", "berdagang", "dagang", "usaha", "umkm",
+            "mau bisnis", "ingin bisnis", "buka usaha", "buka toko",
+            "pitch", "investor", "funding", "modal", "revenue", "profit",
+            "manajemen", "management", "leadership", "pemimpin",
+            "strategi bisnis", "business model", "lean", "scrum", "agile",
+            "networking", "kolaborasi", "partner", "kerjasama",
+        ],
+        "tags": ["bisnis", "startup", "entrepreneur", "wirausaha", "manajemen"],
+    },
+    # ── Marketing & Digital Marketing ────────────────────────────────
+    {
+        "label": "Marketing & Digital",
+        "emoji": "📣",
+        "triggers": [
+            "marketing", "pemasaran", "digital marketing", "promosi",
+            "sosmed", "social media", "instagram", "tiktok", "youtube",
+            "content creator", "konten", "copywriting", "copy",
+            "seo", "sem", "google ads", "facebook ads", "iklan",
+            "branding", "brand", "influencer", "kol", "email marketing",
+            "growth hacking", "growth", "funnel", "conversion",
+            "mau marketing", "belajar marketing", "ingin marketing",
+        ],
+        "tags": ["marketing", "digital", "sosmed", "branding", "konten", "seo"],
+    },
+    # ── Keuangan & Investasi ─────────────────────────────────────────
+    {
+        "label": "Keuangan & Investasi",
+        "emoji": "💰",
+        "triggers": [
+            "keuangan", "finance", "investasi", "invest", "saham", "stock",
+            "crypto", "bitcoin", "aset", "portofolio", "reksa dana",
+            "tabungan", "menabung", "finansial", "literasi keuangan",
+            "trading", "forex", "obligasi", "deposito", "asuransi",
+            "mau invest", "belajar investasi", "ingin investasi", "belajar saham",
+        ],
+        "tags": ["keuangan", "finance", "investasi", "saham", "trading"],
+    },
+    # ── Fotografi & Videografi ───────────────────────────────────────
+    {
+        "label": "Fotografi & Videografi",
+        "emoji": "📸",
+        "triggers": [
+            "foto", "fotografi", "photography", "kamera", "camera",
+            "video", "videografi", "videography", "sinematografi",
+            "editing foto", "edit foto", "lightroom", "photoshop",
+            "premiere", "after effects", "editing video", "edit video",
+            "vlog", "youtuber", "konten video", "short film",
+            "belajar foto", "mau foto", "ingin foto",
+        ],
+        "tags": ["fotografi", "videografi", "foto", "video", "editing"],
+    },
+    # ── Public Speaking & Soft Skills ────────────────────────────────
+    {
+        "label": "Public Speaking & Soft Skills",
+        "emoji": "🎤",
+        "triggers": [
+            "public speaking", "berbicara", "presentasi", "presentation",
+            "komunikasi", "communication", "percaya diri", "self confidence",
+            "leadership", "kepemimpinan", "teamwork", "kerja tim",
+            "soft skill", "personal development", "pengembangan diri",
+            "mau presentasi", "belajar berbicara", "ingin komunikasi",
+            "negosiasi", "negotiation", "persuasi", "storytelling",
+        ],
+        "tags": ["public speaking", "komunikasi", "presentasi", "soft skill", "leadership"],
+    },
+    # ── Cybersecurity ────────────────────────────────────────────────
+    {
+        "label": "Cybersecurity",
+        "emoji": "🔐",
+        "triggers": [
+            "keamanan", "security", "cybersecurity", "hacking", "ethical hacking",
+            "penetration testing", "pentest", "ctf", "bug bounty",
+            "network security", "firewall", "enkripsi", "encryption",
+            "belajar hacking", "mau cyber", "ingin security",
+        ],
+        "tags": ["keamanan", "cyber", "security", "hacking", "pentest"],
+    },
+    # ── Cloud & DevOps ───────────────────────────────────────────────
+    {
+        "label": "Cloud & DevOps",
+        "emoji": "☁️",
+        "triggers": [
+            "cloud", "aws", "gcp", "azure", "google cloud", "devops",
+            "docker", "kubernetes", "k8s", "container", "microservice",
+            "ci/cd", "pipeline", "deployment", "server", "linux",
+            "infrastructure", "iaas", "saas", "paas",
+            "belajar cloud", "mau devops", "ingin cloud",
+        ],
+        "tags": ["cloud", "devops", "aws", "docker", "server", "linux"],
+    },
+    # ── Kesehatan & Wellness ─────────────────────────────────────────
+    {
+        "label": "Kesehatan & Wellness",
+        "emoji": "🏃",
+        "triggers": [
+            "kesehatan", "health", "wellness", "sehat", "olahraga",
+            "yoga", "meditasi", "meditation", "mindfulness", "mental health",
+            "kesehatan mental", "stress", "produktivitas", "produktif",
+            "tidur", "sleep", "nutrisi", "gizi", "diet",
+            "mau sehat", "ingin sehat", "belajar kesehatan",
+        ],
+        "tags": ["kesehatan", "wellness", "olahraga", "mental health", "sehat"],
+    },
+]
+
+
+def _detect_topic(text: str) -> dict | None:
+    """
+    Mendeteksi topik/intent dari teks pengguna.
+    Mengembalikan dict topik pertama yang cocok, atau None.
+    """
+    low = text.lower()
+    # Hapus kata-kata umum yang tidak relevan
+    noise = r"\b(saya|aku|mau|ingin|minta|tolong|pengen|pengin|kepingin|tertarik|belajar|cari|coba|ikut|ikutan|ada|event|acara|seminar|workshop|dong|deh|yuk|nih|loh|kak|mas|mbak|bang)\b"
+    clean = re.sub(noise, " ", low).strip()
+
+    best_topic = None
+    best_score = 0
+
+    for topic in TOPIC_MAP:
+        score = 0
+        for trigger in topic["triggers"]:
+            if trigger in clean or trigger in low:
+                # Bonus skor jika trigger lebih panjang (lebih spesifik)
+                score += 1 + len(trigger.split()) * 0.5
+        if score > best_score:
+            best_score = score
+            best_topic = topic
+
+    return best_topic if best_score > 0 else None
+
+
+def _recommend_by_topic(topic: dict, events: list[dict]) -> tuple[list[dict], list[str]]:
+    """
+    Mencari event yang cocok dengan topik.
+    Mengembalikan (matched_events, unmatched_fallback_events).
+    """
+    matches = []
+    for e in events:
+        if is_full(e):
+            continue
+        haystack = " ".join([
+            e.get("title", ""), e.get("desc", ""),
+            e.get("category", ""), e.get("type", "")
+        ]).lower()
+        if any(tag in haystack for tag in topic["tags"]):
+            matches.append(e)
+
+    # Jika tidak ada yang cocok persis, ambil event yang tidak penuh
+    if not matches:
+        matches = [e for e in events if not is_full(e)][:3]
+
+    return matches
+
 
 # ──────────────────────────────────────────────
 #  TEXT FORMATTERS
@@ -82,14 +286,15 @@ def _event_detail_text(e: dict) -> str:
         f"{'❌ Event ini sudah penuh.' if is_full(e) else 'Ketik **YA** untuk mendaftar atau **kembali** untuk event lain.'}"
     )
 
+
 # ──────────────────────────────────────────────
-#  KEYWORD FALLBACK (Tanpa AI)
+#  KEYWORD FALLBACK 
 # ──────────────────────────────────────────────
 def keyword_fallback(text: str, events: list[dict]) -> str:
-    """Jawaban berbasis kata kunci saat FSM tidak mengenali input."""
+    """Jawaban berbasis kata kunci dan topic detection saat FSM tidak mengenali input."""
     low = text.lower().strip()
 
-    # Sapaan
+    # ── Sapaan ──────────────────────────────────────────────────────
     if _is_greeting(low):
         return (
             "👋 Halo! Saya **EventBot**, siap membantu Anda! 😊\n\n"
@@ -101,7 +306,7 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
             "Mau mulai dari mana?"
         )
 
-    # Harga / gratis
+    # ── Harga / gratis ──────────────────────────────────────────────
     if any(w in low for w in ["gratis", "free", "harga", "bayar", "biaya", "tiket", "murah"]):
         gratis = [e for e in events if e["price"] == 0]
         if gratis and any(w in low for w in ["gratis", "free", "murah"]):
@@ -110,7 +315,7 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
         lines = "\n".join(f"- {e['emoji']} {e['title']}: **{format_price(e['price'])}**" for e in events)
         return f"💰 **Daftar Harga Event:**\n\n{lines}\n\nKetik **lihat event** atau nomor event untuk detail."
 
-    # Kuota / slot
+    # ── Kuota / slot ────────────────────────────────────────────────
     if any(w in low for w in ["sisa", "kuota", "slot", "penuh", "kosong", "tempat"]):
         lines = []
         for e in events:
@@ -119,35 +324,18 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
             lines.append(f"- {e['emoji']} {e['title']}: {status}")
         return "📊 **Status Kuota Event:**\n\n" + "\n".join(lines) + "\n\nKetik **lihat event** untuk daftar lengkap."
 
-    # Lokasi / tempat
+    # ── Lokasi / tempat ─────────────────────────────────────────────
     if any(w in low for w in ["lokasi", "tempat", "dimana", "di mana", "venue", "kota"]):
         lines = "\n".join(f"- {e['emoji']} {e['title']}: 📍 {e['location']}" for e in events)
         return f"📍 **Lokasi Event:**\n\n{lines}\n\nKetik **lihat event** untuk detail lengkap."
 
-    # Jadwal / tanggal
+    # ── Jadwal / tanggal ────────────────────────────────────────────
     if any(w in low for w in ["tanggal", "kapan", "jadwal", "bulan", "hari", "waktu", "jam"]):
         lines = "\n".join(f"- {e['emoji']} {e['title']}: 📅 {e['date']}, 🕐 {e['time']}" for e in events)
         return f"📅 **Jadwal Event:**\n\n{lines}\n\nKetik **lihat event** untuk detail lebih lanjut."
 
-    # Rekomendasi berdasarkan kategori
-    if any(w in low for w in ["rekomendasi", "rekomen", "cocok", "saran", "suggest",
-                               "programmer", "developer", "coding", "teknologi", "tech",
-                               "data", "desain", "bisnis", "marketing", "seminar", "workshop"]):
-        matches = []
-        for e in events:
-            haystack = (e.get("category","") + e.get("type","") + e.get("title","") + e.get("desc","")).lower()
-            topic_keys = ["programmer","developer","coding","teknologi","tech","data","desain","bisnis","marketing","seminar","workshop"]
-            if any(k in haystack for k in topic_keys if k in low):
-                matches.append(e)
-        if not matches:
-            matches = [e for e in events if not is_full(e)][:3]
-        if not matches:
-            matches = events[:3]
-        recs = "\n".join(f"- {e['emoji']} **{e['title']}** — {e['category']}, {format_price(e['price'])}" for e in matches)
-        return f"🎯 **Rekomendasi Event untuk Anda:**\n\n{recs}\n\nKetik **lihat event** untuk semua event atau nomor untuk detail!"
-
-    # Cara daftar / panduan
-    if any(w in low for w in ["cara", "bagaimana", "gimana", "proses", "langkah", "panduan", "daftar"]):
+    # ── Cara daftar / panduan ───────────────────────────────────────
+    if any(w in low for w in ["cara", "bagaimana", "gimana", "proses", "langkah", "panduan"]):
         return (
             "📝 **Cara Mendaftar Event:**\n\n"
             "1. Ketik **lihat event** untuk melihat daftar\n"
@@ -158,7 +346,7 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
             "Mau mulai? Ketik **lihat event** sekarang! 😊"
         )
 
-    # Bantuan / help
+    # ── Bantuan / help ──────────────────────────────────────────────
     if any(w in low for w in ["help", "bantuan", "tolong", "bisa apa", "fitur", "menu"]):
         return (
             "🤖 **EventBot bisa membantu Anda dengan:**\n\n"
@@ -169,10 +357,61 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
             "- **`jadwal`** — lihat jadwal semua event\n"
             "- **`lokasi`** — lihat lokasi semua event\n"
             "- **`rekomendasi`** — dapatkan saran event untuk Anda\n"
-            "- **`cara daftar`** — panduan pendaftaran step-by-step"
+            "- **`cara daftar`** — panduan pendaftaran step-by-step\n\n"
+            "Atau ceritakan minat Anda, misalnya:\n"
+            "_\"saya mau belajar UI/UX\"_ atau _\"tertarik coding Python\"_!"
         )
 
-    # Default
+    # ── TOPIC DETECTION — Inti rekomendasi berbasis intent ──────────
+    # Ini menangkap pola seperti:
+    # "saya mau belajar UI/UX", "tertarik data science", "ingin coding",
+    # "pengen ikut workshop desain", "ada event tentang marketing?", dll.
+    topic = _detect_topic(low)
+    if topic:
+        matched = _recommend_by_topic(topic, events)
+
+        if not matched:
+            return (
+                f"{topic['emoji']} Wah, minat Anda di bidang **{topic['label']}** sangat bagus! "
+                f"Sayangnya belum ada event yang tersedia untuk topik ini saat ini.\n\n"
+                f"Ketik **lihat event** untuk melihat semua event yang tersedia. "
+                f"Kami akan terus menambahkan event baru! 😊"
+            )
+
+        # Format rekomendasi dengan info lengkap
+        rec_lines = []
+        for i, e in enumerate(matched[:3], 1):
+            sisa = e["quota"] - e["registered"]
+            status = f"🟢 {sisa} kursi tersisa"
+            rec_lines.append(
+                f"**{i}. {e['emoji']} {e['title']}**\n"
+                f"   📅 {e['date']} | 💰 {format_price(e['price'])}\n"
+                f"   📍 {e['location']} | {status}"
+            )
+
+        return (
+            f"{topic['emoji']} Karena Anda tertarik dengan **{topic['label']}**, "
+            f"berikut event yang relevan:\n\n"
+            + "\n\n".join(rec_lines)
+            + "\n\nKetik **lihat event** untuk semua event atau **nomor event** untuk detail & daftar!"
+        )
+
+    # ── Fallback eksplisit kata "rekomendasi" ───────────────────────
+    if any(w in low for w in ["rekomendasi", "rekomen", "cocok", "saran", "suggest"]):
+        available = [e for e in events if not is_full(e)][:3]
+        if not available:
+            available = events[:3]
+        recs = "\n".join(
+            f"- {e['emoji']} **{e['title']}** — {e['category']}, {format_price(e['price'])}"
+            for e in available
+        )
+        return (
+            f"🎯 **Rekomendasi Event Populer:**\n\n{recs}\n\n"
+            f"💡 _Tip: Ceritakan minat Anda untuk rekomendasi lebih tepat!_\n"
+            f"Contoh: _\"saya mau belajar desain\"_ atau _\"tertarik bisnis startup\"_"
+        )
+
+    # ── Default ─────────────────────────────────────────────────────
     return (
         "😊 Maaf, saya belum mengenali perintah tersebut.\n\n"
         "Coba salah satu kata kunci berikut:\n"
@@ -180,7 +419,8 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
         "- **`cek status`** — cek pendaftaran\n"
         "- **`batal`** — batalkan pendaftaran\n"
         "- **`harga`** / **`jadwal`** / **`lokasi`** / **`rekomendasi`**\n\n"
-        "Atau ketik **`bantuan`** untuk panduan lengkap! 😊"
+        "Atau ceritakan minat Anda! Contoh:\n"
+        "_\"saya mau belajar UI/UX\"_, _\"tertarik coding\"_, _\"ingin belajar bisnis\"_ 💡"
     )
 
 
@@ -191,7 +431,7 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
     t   = text.strip()
     low = _low(t)
 
-    # ── IDLE ──────────────────────────────────
+    # ── IDLE ─
     if fsm.state == State.IDLE:
         if _is_browse(low):
             fsm.state = State.BROWSING
@@ -213,10 +453,10 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
                 ["Lihat Event", "Cek Status", "Batal Pendaftaran"],
                 False,
             )
-        # Coba jawab dengan AI; jika tidak ada API key, gunakan fallback
+        
         return "", ["Lihat Event", "Cek Status", "Batal Pendaftaran"], True
 
-    # ── BROWSING ──────────────────────────────
+    # ── BROWSING 
     elif fsm.state == State.BROWSING:
         if _is_back(low):
             fsm.state = State.IDLE
