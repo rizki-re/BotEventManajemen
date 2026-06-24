@@ -18,7 +18,40 @@ from fsm import (
     DEFAULT_EVENTS, STATS, FEATURES, STEPS, FAQ,
     format_price, quota_pct, is_full, State, FSM, STATE_META
 )
-from engine import fsm_step, keyword_fallback
+from engine import fsm_step, keyword_fallback, MAIN_MENU_CHIPS
+
+# ─────────────────────────────────────────────
+#  SHARED UI HELPERS
+# ─────────────────────────────────────────────
+NAV_PAGES = [
+    ("🏠", "Beranda", "home"),
+    ("✨", "Fitur", "features"),
+    ("📅", "Event", "events"),
+    ("💬", "Chatbot", "chatbot"),
+    ("❓", "FAQ", "faq"),
+]
+
+def navigate_to(page: str):
+    """Set the active page and trigger a Streamlit rerun."""
+    st.session_state.page = page
+    st.rerun()
+
+def section_header(tag: str, title: str, subtitle: str = ""):
+    """Render a consistent section header block."""
+    sub_html = f'<p class="section-sub">{subtitle}</p>' if subtitle else ""
+    st.markdown(
+        f'<div class="section-tag">{tag}</div>'
+        f'<h2 class="section-title">{title}</h2>{sub_html}',
+        unsafe_allow_html=True,
+    )
+
+def render_grid_rows(items: list, cols_per_row: int, render_fn):
+    """Lay out *items* in rows of *cols_per_row*, calling render_fn(item, col, index)."""
+    for row_start in range(0, len(items), cols_per_row):
+        row = items[row_start:row_start + cols_per_row]
+        cols = st.columns(len(row))
+        for col, (item, idx) in zip(cols, [(it, row_start + j) for j, it in enumerate(row)]):
+            render_fn(item, col, idx)
 
 # ─────────────────────────────────────────────
 #  INJEKSI CSS & FONTS (Load dari file terpisah)
@@ -59,8 +92,7 @@ def render_sidebar():
             """, unsafe_allow_html=True
         )
 
-        pages = [("🏠", "Beranda", "home"), ("✨", "Fitur", "features"),
-                 ("📅", "Event", "events"), ("💬", "Chatbot", "chatbot"), ("❓", "FAQ", "faq")]
+        pages = NAV_PAGES
         current = st.session_state.get("page", "home")
 
         st.markdown("""
@@ -81,8 +113,7 @@ def render_sidebar():
                     </div>""", unsafe_allow_html=True)
             else:
                 if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True):
-                    st.session_state.page = key
-                    st.rerun()
+                    navigate_to(key)
 
         st.markdown("<hr style='border-color:#2d2050;margin:1.2rem 0'>", unsafe_allow_html=True)
 
@@ -105,7 +136,7 @@ def render_sidebar():
         st.markdown("<p style='font-size:.68rem;color:#7460a8;text-align:center;margin-top:1rem'>Powered by FSM &amp; Kata Kunci</p>", unsafe_allow_html=True)
 
 def render_topnav():
-    pages = [("🏠", "Beranda", "home"), ("✨", "Fitur", "features"), ("📅", "Event", "events"), ("💬", "Chatbot", "chatbot"), ("❓", "FAQ", "faq")]
+    pages = NAV_PAGES
     current = st.session_state.get("page", "home")
     cols = st.columns([1, 1, 1, 1, 1, 3])
     for col, (icon, label, key) in zip(cols, pages):
@@ -117,8 +148,7 @@ def render_topnav():
                 st.markdown(f'<div class="top-navbar"><span class="{css_class}" style="background:rgba(124,92,224,0.2);color:#f0ecfc;border:1px solid rgba(124,92,224,0.45);border-radius:8px;padding:7px 14px;font-size:.88rem;font-weight:600;display:inline-block;">{btn_label}</span></div>', unsafe_allow_html=True)
             else:
                 if st.button(btn_label, key=f"topnav_{key}", use_container_width=True):
-                    st.session_state.page = key
-                    st.rerun()
+                    navigate_to(key)
     st.markdown("<hr style='border-color:#2d2050;margin:0 0 1rem 0'>", unsafe_allow_html=True)
 
 def render_hero():
@@ -135,28 +165,25 @@ def render_hero():
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("🤖 Mulai Chat", key="hero_chat", use_container_width=True):
-                st.session_state.page = "chatbot"
-                st.rerun()
+                navigate_to("chatbot")
         with col_b:
             if st.button("📅 Lihat Event", key="hero_event", use_container_width=True):
-                st.session_state.page = "events"
-                st.rerun()
+                navigate_to("events")
 
     cols = st.columns(len(STATS))
     for col, stat in zip(cols, STATS):
         with col:
             st.markdown(f'<div class="stat-item"><div class="stat-num">{stat["num"]}</div><div class="stat-label">{stat["label"]}</div></div>', unsafe_allow_html=True)
 
-def render_features():
-    st.markdown('<div class="section-tag">Fitur Utama</div><h2 class="section-title">Semua yang Anda Butuhkan</h2><p class="section-sub">Ditenagai logika FSM + AI — percakapan terarah sekaligus cerdas dan natural.</p>', unsafe_allow_html=True)
+def _render_feature_card(feat: dict, col, _idx: int):
     COLOR_CLASS = {"purple":"fi-purple","pink":"fi-pink","cyan":"fi-cyan","green":"fi-green","amber":"fi-amber","red":"fi-red"}
-    for row_start in range(0, len(FEATURES), 3):
-        row  = FEATURES[row_start:row_start+3]
-        cols = st.columns(len(row))
-        for col, feat in zip(cols, row):
-            cc = COLOR_CLASS.get(feat["color"], "fi-purple")
-            with col:
-                st.markdown(f'<div class="feat-card"><div class="feat-icon {cc}">{feat["icon"]}</div><div class="feat-title">{feat["title"]}</div><p class="feat-desc">{feat["desc"]}</p></div>', unsafe_allow_html=True)
+    cc = COLOR_CLASS.get(feat["color"], "fi-purple")
+    with col:
+        st.markdown(f'<div class="feat-card"><div class="feat-icon {cc}">{feat["icon"]}</div><div class="feat-title">{feat["title"]}</div><p class="feat-desc">{feat["desc"]}</p></div>', unsafe_allow_html=True)
+
+def render_features():
+    section_header("Fitur Utama", "Semua yang Anda Butuhkan", "Ditenagai logika FSM + AI — percakapan terarah sekaligus cerdas dan natural.")
+    render_grid_rows(FEATURES, 3, _render_feature_card)
 
 def render_event_card(ev: dict, col, idx: int):
     pct = quota_pct(ev)
@@ -176,23 +203,18 @@ def render_event_card(ev: dict, col, idx: int):
             f'<div class="event-footer"><span class="event-price">{harga}</span></div></div>', unsafe_allow_html=True)
         label = "❌ Event Penuh" if full else "✍️ Daftar Sekarang"
         if st.button(label, key=f"daftar_{ev['id']}", disabled=full, use_container_width=True):
-            st.session_state.page = "chatbot"
             st.session_state.pending_event_idx = idx
-            st.rerun()
+            navigate_to("chatbot")
 
 def render_events_grid(events: list[dict]):
-    st.markdown('<div class="section-tag">Daftar Event</div><h2 class="section-title">Event yang Tersedia</h2><p class="section-sub">Pilih event sesuai minat Anda. Daftar langsung via chatbot.</p>', unsafe_allow_html=True)
-    for row_start in range(0, len(events), 3):
-        row_events = events[row_start:row_start+3]
-        cols = st.columns(len(row_events))
-        for col, (ev, i) in zip(cols, [(e, row_start+j+1) for j, e in enumerate(row_events)]):
-            render_event_card(ev, col, i)
+    section_header("Daftar Event", "Event yang Tersedia", "Pilih event sesuai minat Anda. Daftar langsung via chatbot.")
+    render_grid_rows(events, 3, lambda ev, col, idx: render_event_card(ev, col, idx + 1))
 
 def _init_chat():
     if "fsm" not in st.session_state: st.session_state.fsm = FSM()
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = [("bot", "👋 Halo! Saya **EventBot**, asisten untuk manajemen event & konferensi.\n\nSaya bisa membantu Anda:\n- 📋 Cari dan lihat semua event tersedia\n- ✍️ Daftar ke event pilihan Anda\n- 🔍 Cek status pendaftaran\n- ❌ Batalkan pendaftaran\n- 💬 Tanya tentang harga, jadwal, lokasi, dan rekomendasi event!\n\nKetik apa saja atau klik tombol di bawah untuk mulai 😊")]
-        st.session_state.chat_chips = ["Lihat Event", "Cek Status", "Batal Pendaftaran"]
+        st.session_state.chat_chips = MAIN_MENU_CHIPS
 
 def _send(text: str):
     if not text.strip(): return
@@ -215,7 +237,7 @@ def render_chatbot_page():
 
     left, right = st.columns([1, 1.6], gap="large")
     with left:
-        st.markdown('<div class="section-tag">Chatbot Interaktif</div><h2 class="section-title">Tanya Apa Saja!</h2><p class="section-sub">EventBot berbasis kata kunci — bisa menjawab pertanyaan seputar event, beri rekomendasi, dan bantu pendaftaran.</p>', unsafe_allow_html=True)
+        section_header("Chatbot Interaktif", "Tanya Apa Saja!", "EventBot berbasis kata kunci — bisa menjawab pertanyaan seputar event, beri rekomendasi, dan bantu pendaftaran.")
         features_info = [("🔑", "Kata Kunci Pintar", "Ketik 'harga', 'jadwal', 'lokasi', atau 'rekomendasi' dan EventBot langsung menjawab!"), ("📋", "Lihat Semua Event", "Ketik 'lihat event' untuk daftar lengkap dengan detail harga dan kuota."), ("✍️", "Panduan Pendaftaran", "Bot memandu step-by-step: nama → email → HP → konfirmasi → kode registrasi."), ("🎫", "Kode Registrasi Instan", "Dapat kode EVT-XXXXX langsung setelah konfirmasi pendaftaran."), ("🔍", "Cek & Kelola Pendaftaran", "Cek status atau batalkan kapan saja menggunakan kode registrasi.")]
         for icon, title, desc in features_info:
             st.markdown(f'<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;margin-bottom:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius)"><div style="width:34px;height:34px;border-radius:9px;background:rgba(124,92,224,0.15);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">{icon}</div><div><div style="font-size:.85rem;font-weight:600;color:#f0ecfc;margin-bottom:2px">{title}</div><div style="font-size:.76rem;color:#b09cd4;line-height:1.45">{desc}</div></div></div>', unsafe_allow_html=True)
@@ -247,9 +269,8 @@ def render_chatbot_page():
             st.rerun()
 
         if st.button("🔄 Reset Chat", key="btn_reset_chat"):
-            st.session_state.pop("fsm", None)
-            st.session_state.pop("chat_history", None)
-            st.session_state.pop("chat_chips", None)
+            for k in ("fsm", "chat_history", "chat_chips"):
+                st.session_state.pop(k, None)
             st.rerun()
 
 def render_how_it_works():
@@ -259,7 +280,7 @@ def render_how_it_works():
         with col: st.markdown(f'<div class="step-item"><div class="step-num">{step["num"]}</div><div class="step-icon">{step["icon"]}</div><div class="step-label">{step["label"]}</div><div class="step-desc">{step["desc"]}</div></div>', unsafe_allow_html=True)
 
 def render_faq():
-    st.markdown('<div class="section-tag">FAQ</div><h2 class="section-title">Pertanyaan Umum</h2>', unsafe_allow_html=True)
+    section_header("FAQ", "Pertanyaan Umum")
     for item in FAQ:
         with st.expander(item["q"]): st.markdown(f'<p style="font-size:.875rem;color:#b09cd4;line-height:1.6">{item["a"]}</p>', unsafe_allow_html=True)
 
@@ -268,8 +289,7 @@ def render_cta():
     c1, c2, c3 = st.columns([2, 1, 2])
     with c2:
         if st.button("🚀 Mulai Sekarang", key="cta_btn", use_container_width=True):
-            st.session_state.page = "chatbot"
-            st.rerun()
+            navigate_to("chatbot")
 
 def render_footer():
     st.markdown('<div class="eb-footer"><p>© 2025 <strong>EventBot</strong> — Platform Manajemen Event &amp; Konferensi | Dibangun dengan ❤️ menggunakan FSM &amp; Kata Kunci</p><p style="margin-top:4px;font-size:.72rem">Sistem Chatbot FSM berbasis kata kunci untuk manajemen event dan konferensi</p></div>', unsafe_allow_html=True)

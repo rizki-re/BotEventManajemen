@@ -161,6 +161,14 @@ def quota_pct(event: dict) -> int:
 def is_full(event: dict) -> bool:
     return event["registered"] >= event["quota"]
 
+def event_status_text(event: dict) -> str:
+    """Shared formatter: '🔴 PENUH' or '🟢 N kursi tersisa (X% terisi)'."""
+    if is_full(event):
+        return "🔴 PENUH"
+    sisa = event["quota"] - event["registered"]
+    pct = quota_pct(event)
+    return f"🟢 {sisa} kursi tersisa ({pct}% terisi)"
+
 # ──────────────────────────────────────────────
 #  FSM STATES & DATA CLASS (Dari engine.py)
 # ──────────────────────────────────────────────
