@@ -1,8 +1,8 @@
 """
 engine.py — NLP + FSM EventBot (upgraded)
 """
-import random
 import re
+import secrets
 import string
 from fsm import State, FSM, get_event_by_index, format_price, quota_pct, is_full
 
@@ -42,7 +42,8 @@ def _is_reg_code(t):
     return bool(re.match(r"^EVT-[A-Z0-9]{5}$", t.upper()))
 
 def _gen_code() -> str:
-    return "EVT-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    alphabet = string.ascii_uppercase + string.digits
+    return "EVT-" + "".join(secrets.choice(alphabet) for _ in range(5))
 
 
 # ──────────────────────────────────────────────
@@ -492,6 +493,8 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
             return "Pendaftaran dibatalkan. Kembali ke menu utama.", ["Lihat Event", "Cek Status"], False
         if len(t) < 3 or t.isdigit():
             return "⚠️ Nama tidak valid. Masukkan **nama lengkap** Anda (min. 3 huruf):", ["Kembali"], False
+        if len(t) > 100:
+            return "⚠️ Nama terlalu panjang (maks. 100 karakter). Coba lagi:", ["Kembali"], False
         fsm.user_info["name"] = t.title()
         fsm.state = State.COLLECT_EMAIL
         return f"✅ Nama: **{t.title()}**\n\n📧 Masukkan **alamat email** aktif Anda:", ["Kembali"], False
@@ -502,6 +505,8 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
             fsm.state = State.COLLECT_NAME
             fsm.user_info.pop("name", None)
             return "✏️ Masukkan ulang **nama lengkap** Anda:", ["Kembali"], False
+        if len(t) > 254:
+            return "⚠️ Email terlalu panjang (maks. 254 karakter). Coba lagi:", ["Kembali"], False
         if not _is_valid_email(t):
             return "⚠️ Format email tidak valid.\nContoh yang benar: `nama@email.com`\n\nCoba lagi:", ["Kembali"], False
         fsm.user_info["email"] = t.lower()
@@ -514,6 +519,8 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
             fsm.state = State.COLLECT_EMAIL
             fsm.user_info.pop("email", None)
             return "📧 Masukkan ulang **email** Anda:", ["Kembali"], False
+        if len(t) > 20:
+            return "⚠️ Nomor HP terlalu panjang (maks. 20 karakter). Coba lagi:", ["Kembali"], False
         if not _is_valid_phone(t):
             return "⚠️ Format nomor HP tidak valid.\nGunakan format: `08123456789` atau `+628123456789`\n\nCoba lagi:", ["Kembali"], False
         fsm.user_info["phone"] = t

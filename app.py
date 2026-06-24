@@ -3,6 +3,7 @@ app.py — Entry point EventBot Streamlit
 Jalankan: streamlit run app.py
 """
 import copy
+import html
 import streamlit as st
 import os
 
@@ -91,10 +92,13 @@ def render_sidebar():
             if fsm.registrations:
                 st.markdown("<p style='font-size:.72rem;color:#7460a8;margin-bottom:.5rem;'>🎫 PENDAFTARAN AKTIF</p>", unsafe_allow_html=True)
                 for code, reg in fsm.registrations.items():
+                    safe_code = html.escape(code)
+                    safe_name = html.escape(reg['name'])
+                    safe_title = html.escape(reg['event']['title'][:30])
                     st.markdown(
                         f"<div style='background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:.75rem;'>"
-                        f"<strong style='color:#34d399'>{code}</strong><br><span style='color:#b09cd4'>{reg['name']}</span><br>"
-                        f"<span style='color:#7460a8'>{reg['event']['title'][:30]}...</span></div>", unsafe_allow_html=True)
+                        f"<strong style='color:#34d399'>{safe_code}</strong><br><span style='color:#b09cd4'>{safe_name}</span><br>"
+                        f"<span style='color:#7460a8'>{safe_title}...</span></div>", unsafe_allow_html=True)
             
             emoji, color = STATE_META.get(fsm.state, ("⚪", "#888"))
             st.markdown(
@@ -196,6 +200,7 @@ def _init_chat():
 
 def _send(text: str):
     if not text.strip(): return
+    text = text[:1000]
     fsm = st.session_state.fsm
     events = st.session_state.events
     history = st.session_state.chat_history
