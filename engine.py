@@ -4,7 +4,7 @@ engine.py — NLP + FSM EventBot (upgraded)
 import random
 import re
 import string
-from fsm import State, FSM, get_event_by_index, format_price, quota_pct, is_full
+from fsm import State, FSM, get_event_by_index, format_price, quota_pct, is_full, event_status_text
 
 # ──────────────────────────────────────────────
 #  NLP HELPERS (Dengan Kata Kunci Lebih Beragam)
@@ -43,6 +43,34 @@ def _is_reg_code(t):
 
 def _gen_code() -> str:
     return "EVT-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+
+def _matches_any(text: str, keywords: list[str]) -> bool:
+    """Return True if any keyword appears in text."""
+    return any(w in text for w in keywords)
+
+
+# ──────────────────────────────────────────────
+#  SHARED CHIP LISTS
+# ──────────────────────────────────────────────
+MAIN_MENU_CHIPS = ["Lihat Event", "Cek Status", "Batal Pendaftaran"]
+
+def _event_number_chips(events: list[dict]) -> list[str]:
+    """Numbered chips for event selection plus 'Kembali'."""
+    return [str(i) for i in range(1, len(events) + 1)] + ["Kembali"]
+
+
+# ──────────────────────────────────────────────
+#  SHARED GREETING TEXT
+# ──────────────────────────────────────────────
+GREETING_RESPONSE = (
+    "\U0001f44b Halo! Saya **EventBot**, siap membantu Anda! \U0001f60a\n\n"
+    "Saya bisa membantu:\n"
+    "- \U0001f4cb **Lihat Event** \u2014 cari event yang cocok untuk Anda\n"
+    "- \U0001f50d **Cek Status** \u2014 cek pendaftaran dengan kode registrasi\n"
+    "- \u274c **Batal Pendaftaran** \u2014 batalkan pendaftaran yang ada\n"
+    "- \U0001f4ac Tanya tentang **harga**, **jadwal**, **lokasi**, atau **rekomendasi**!\n\n"
+    "Mau mulai dari mana?"
+)
 
 
 # ──────────────────────────────────────────────
@@ -261,7 +289,7 @@ def _recommend_by_topic(topic: dict, events: list[dict]) -> tuple[list[dict], li
 def _event_list_text(events: list[dict]) -> str:
     lines = ["📋 **Daftar Event yang Tersedia:**\n"]
     for i, e in enumerate(events, 1):
-        status = "🔴 PENUH" if is_full(e) else f"🟢 {e['quota'] - e['registered']} kursi tersisa"
+        status = event_status_text(e)
         lines.append(
             f"**{i}. {e['emoji']} {e['title']}**\n"
             f"   📅 {e['date']} | 🕐 {e['time']}\n"
@@ -272,8 +300,7 @@ def _event_list_text(events: list[dict]) -> str:
     return "\n".join(lines)
 
 def _event_detail_text(e: dict) -> str:
-    pct    = quota_pct(e)
-    status = "🔴 PENUH" if is_full(e) else f"🟢 {e['quota'] - e['registered']} kursi tersisa ({pct}% terisi)"
+    status = event_status_text(e)
     return (
         f"### {e['emoji']} {e['title']}\n\n"
         f"📅 **Tanggal:** {e['date']}\n"
@@ -296,46 +323,36 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
 
     # ── Sapaan ──────────────────────────────────────────────────────
     if _is_greeting(low):
-        return (
-            "👋 Halo! Saya **EventBot**, siap membantu Anda! 😊\n\n"
-            "Saya bisa membantu:\n"
-            "- 📋 **Lihat Event** — ketik `lihat event`\n"
-            "- 🔍 **Cek Status** — ketik `cek status`\n"
-            "- ❌ **Batal Pendaftaran** — ketik `batal`\n"
-            "- 💬 Tanya tentang **harga**, **jadwal**, **lokasi**, atau **rekomendasi**!\n\n"
-            "Mau mulai dari mana?"
-        )
+        return GREETING_RESPONSE
 
     # ── Harga / gratis ──────────────────────────────────────────────
-    if any(w in low for w in ["gratis", "free", "harga", "bayar", "biaya", "tiket", "murah"]):
+    if _matches_any(low, ["gratis", "free", "harga", "bayar", "biaya", "tiket", "murah"]):
         gratis = [e for e in events if e["price"] == 0]
-        if gratis and any(w in low for w in ["gratis", "free", "murah"]):
+        if gratis and _matches_any(low, ["gratis", "free", "murah"]):
             names = ", ".join(f"**{e['title']}**" for e in gratis)
             return f"🎉 Event **gratis** yang tersedia: {names}\n\nKetik **lihat event** untuk detail lengkap!"
         lines = "\n".join(f"- {e['emoji']} {e['title']}: **{format_price(e['price'])}**" for e in events)
         return f"💰 **Daftar Harga Event:**\n\n{lines}\n\nKetik **lihat event** atau nomor event untuk detail."
 
     # ── Kuota / slot ────────────────────────────────────────────────
-    if any(w in low for w in ["sisa", "kuota", "slot", "penuh", "kosong", "tempat"]):
+    if _matches_any(low, ["sisa", "kuota", "slot", "penuh", "kosong", "tempat"]):
         lines = []
         for e in events:
-            sisa = e["quota"] - e["registered"]
-            status = "🔴 PENUH" if sisa <= 0 else f"🟢 {sisa} kursi tersisa"
-            lines.append(f"- {e['emoji']} {e['title']}: {status}")
+            lines.append(f"- {e['emoji']} {e['title']}: {event_status_text(e)}")
         return "📊 **Status Kuota Event:**\n\n" + "\n".join(lines) + "\n\nKetik **lihat event** untuk daftar lengkap."
 
     # ── Lokasi / tempat ─────────────────────────────────────────────
-    if any(w in low for w in ["lokasi", "tempat", "dimana", "di mana", "venue", "kota"]):
+    if _matches_any(low, ["lokasi", "tempat", "dimana", "di mana", "venue", "kota"]):
         lines = "\n".join(f"- {e['emoji']} {e['title']}: 📍 {e['location']}" for e in events)
         return f"📍 **Lokasi Event:**\n\n{lines}\n\nKetik **lihat event** untuk detail lengkap."
 
     # ── Jadwal / tanggal ────────────────────────────────────────────
-    if any(w in low for w in ["tanggal", "kapan", "jadwal", "bulan", "hari", "waktu", "jam"]):
+    if _matches_any(low, ["tanggal", "kapan", "jadwal", "bulan", "hari", "waktu", "jam"]):
         lines = "\n".join(f"- {e['emoji']} {e['title']}: 📅 {e['date']}, 🕐 {e['time']}" for e in events)
         return f"📅 **Jadwal Event:**\n\n{lines}\n\nKetik **lihat event** untuk detail lebih lanjut."
 
     # ── Cara daftar / panduan ───────────────────────────────────────
-    if any(w in low for w in ["cara", "bagaimana", "gimana", "proses", "langkah", "panduan"]):
+    if _matches_any(low, ["cara", "bagaimana", "gimana", "proses", "langkah", "panduan"]):
         return (
             "📝 **Cara Mendaftar Event:**\n\n"
             "1. Ketik **lihat event** untuk melihat daftar\n"
@@ -347,7 +364,7 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
         )
 
     # ── Bantuan / help ──────────────────────────────────────────────
-    if any(w in low for w in ["help", "bantuan", "tolong", "bisa apa", "fitur", "menu"]):
+    if _matches_any(low, ["help", "bantuan", "tolong", "bisa apa", "fitur", "menu"]):
         return (
             "🤖 **EventBot bisa membantu Anda dengan:**\n\n"
             "- **`lihat event`** — tampilkan semua event tersedia\n"
@@ -381,12 +398,10 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
         # Format rekomendasi dengan info lengkap
         rec_lines = []
         for i, e in enumerate(matched[:3], 1):
-            sisa = e["quota"] - e["registered"]
-            status = f"🟢 {sisa} kursi tersisa"
             rec_lines.append(
                 f"**{i}. {e['emoji']} {e['title']}**\n"
                 f"   📅 {e['date']} | 💰 {format_price(e['price'])}\n"
-                f"   📍 {e['location']} | {status}"
+                f"   📍 {e['location']} | {event_status_text(e)}"
             )
 
         return (
@@ -397,7 +412,7 @@ def keyword_fallback(text: str, events: list[dict]) -> str:
         )
 
     # ── Fallback eksplisit kata "rekomendasi" ───────────────────────
-    if any(w in low for w in ["rekomendasi", "rekomen", "cocok", "saran", "suggest"]):
+    if _matches_any(low, ["rekomendasi", "rekomen", "cocok", "saran", "suggest"]):
         available = [e for e in events if not is_full(e)][:3]
         if not available:
             available = events[:3]
@@ -435,7 +450,7 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
     if fsm.state == State.IDLE:
         if _is_browse(low):
             fsm.state = State.BROWSING
-            return _event_list_text(events), [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
+            return _event_list_text(events), _event_number_chips(events), False
         if _is_status(low):
             fsm.state = State.CHECK_STATUS
             return "🔍 **Cek Status Pendaftaran**\n\nMasukkan **kode registrasi** Anda (format: `EVT-XXXXX`):", ["Kembali"], False
@@ -443,24 +458,15 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
             fsm.state = State.CANCELLING
             return "❌ **Batalkan Pendaftaran**\n\nMasukkan **kode registrasi** yang ingin dibatalkan:", ["Kembali"], False
         if _is_greeting(low):
-            return (
-                "👋 Halo! Saya **EventBot**, siap membantu Anda! 😊\n\n"
-                "Saya bisa membantu:\n"
-                "- 📋 **Lihat Event** — cari event yang cocok untuk Anda\n"
-                "- 🔍 **Cek Status** — cek pendaftaran dengan kode registrasi\n"
-                "- ❌ **Batal Pendaftaran** — batalkan pendaftaran yang ada\n\n"
-                "Mau mulai dari mana?",
-                ["Lihat Event", "Cek Status", "Batal Pendaftaran"],
-                False,
-            )
+            return GREETING_RESPONSE, MAIN_MENU_CHIPS, False
         
-        return "", ["Lihat Event", "Cek Status", "Batal Pendaftaran"], True
+        return "", MAIN_MENU_CHIPS, True
 
     # ── BROWSING 
     elif fsm.state == State.BROWSING:
         if _is_back(low):
             fsm.state = State.IDLE
-            return "Kembali ke menu utama. Ada yang bisa saya bantu? 😊", ["Lihat Event", "Cek Status", "Batal Pendaftaran"], False
+            return "Kembali ke menu utama. Ada yang bisa saya bantu? 😊", MAIN_MENU_CHIPS, False
         if t.isdigit():
             idx = int(t)
             ev  = get_event_by_index(events, idx)
@@ -468,18 +474,18 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
                 fsm.selected_event = ev
                 fsm.state = State.REGISTERING
                 return _event_detail_text(ev), (["Kembali"] if is_full(ev) else ["Ya, Daftar!", "Kembali"]), False
-            return f"❌ Nomor **{idx}** tidak valid. Pilih antara 1–{len(events)}.", [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
-        return "", [str(i) for i in range(1, len(events)+1)] + ["Kembali"], True
+            return f"❌ Nomor **{idx}** tidak valid. Pilih antara 1–{len(events)}.", _event_number_chips(events), False
+        return "", _event_number_chips(events), True
 
     # ── REGISTERING ───────────────────────────
     elif fsm.state == State.REGISTERING:
         if _is_back(low):
             fsm.state = State.BROWSING
-            return _event_list_text(events), [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
+            return _event_list_text(events), _event_number_chips(events), False
         ev = fsm.selected_event
         if ev and is_full(ev):
             fsm.state = State.BROWSING
-            return "❌ Event ini sudah penuh. Silakan pilih event lain.", [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
+            return "❌ Event ini sudah penuh. Silakan pilih event lain.", _event_number_chips(events), False
         if _is_yes(low):
             fsm.state = State.COLLECT_NAME
             return "Baik! Mari mulai pendaftaran 😊\n\n✏️ Masukkan **nama lengkap** Anda:", ["Kembali"], False
@@ -566,7 +572,7 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
     elif fsm.state == State.DONE:
         if _is_browse(low) or "event lain" in low:
             fsm.state = State.BROWSING
-            return _event_list_text(events), [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
+            return _event_list_text(events), _event_number_chips(events), False
         if _is_status(low):
             fsm.state = State.CHECK_STATUS
             return "Masukkan **kode registrasi** Anda:", ["Kembali"], False
@@ -577,7 +583,7 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
     elif fsm.state == State.CHECK_STATUS:
         if _is_back(low):
             fsm.state = State.IDLE
-            return "Kembali ke menu utama.", ["Lihat Event", "Cek Status", "Batal Pendaftaran"], False
+            return "Kembali ke menu utama.", MAIN_MENU_CHIPS, False
         code = t.upper()
         reg  = fsm.registrations.get(code)
         if reg:
