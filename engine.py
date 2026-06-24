@@ -1,10 +1,13 @@
 """
 engine.py — NLP + FSM EventBot (upgraded)
 """
+import logging
 import random
 import re
 import string
 from fsm import State, FSM, get_event_by_index, format_price, quota_pct, is_full
+
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
 #  NLP HELPERS (Dengan Kata Kunci Lebih Beragam)
@@ -477,7 +480,11 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
             fsm.state = State.BROWSING
             return _event_list_text(events), [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
         ev = fsm.selected_event
-        if ev and is_full(ev):
+        if ev is None:
+            logger.error("REGISTERING state reached with no selected event")
+            fsm.state = State.BROWSING
+            return "⚠️ Terjadi kesalahan — event belum dipilih. Silakan pilih ulang.", [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
+        if is_full(ev):
             fsm.state = State.BROWSING
             return "❌ Event ini sudah penuh. Silakan pilih event lain.", [str(i) for i in range(1, len(events)+1)] + ["Kembali"], False
         if _is_yes(low):
@@ -519,6 +526,11 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
         fsm.user_info["phone"] = t
         fsm.state = State.CONFIRMING
         ev = fsm.selected_event
+        if ev is None:
+            logger.error("COLLECT_PHONE state reached with no selected event")
+            fsm.state = State.IDLE
+            fsm.user_info = {}
+            return "⚠️ Terjadi kesalahan — event tidak ditemukan. Silakan mulai ulang.", ["Lihat Event", "Cek Status"], False
         return (
             f"📋 **Konfirmasi Data Pendaftaran**\n\n"
             f"👤 Nama   : **{fsm.user_info['name']}**\n"
@@ -538,6 +550,11 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
         if _is_yes(low):
             from datetime import datetime
             ev   = fsm.selected_event
+            if ev is None:
+                logger.error("CONFIRMING state reached with no selected event")
+                fsm.state = State.IDLE
+                fsm.user_info = {}
+                return "⚠️ Terjadi kesalahan — event tidak ditemukan. Silakan mulai ulang.", ["Lihat Event", "Cek Status"], False
             code = _gen_code()
             ev["registered"] = min(ev["registered"] + 1, ev["quota"])
             fsm.registrations[code] = {
@@ -642,6 +659,8 @@ def fsm_step(fsm: FSM, text: str, events: list[dict]) -> tuple[str, list[str], b
                     ["Lihat Event", "Selesai"],
                     False,
                 )
+            logger.warning("CANCEL_CONFIRM: registration %s not found (may have been already cancelled)", code)
+            return "⚠️ Pendaftaran tidak ditemukan — mungkin sudah dibatalkan sebelumnya.", ["Lihat Event", "Cek Status"], False
         fsm.state = State.IDLE
         fsm.cancel_code = ""
         return "Pembatalan dibatalkan 😊 Pendaftaran Anda masih **aktif**.", ["Lihat Event", "Cek Status"], False

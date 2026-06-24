@@ -3,8 +3,11 @@ app.py — Entry point EventBot Streamlit
 Jalankan: streamlit run app.py
 """
 import copy
+import logging
 import streamlit as st
 import os
+
+logger = logging.getLogger(__name__)
 
 # ── Page config (MUST be first Streamlit call) ────────────────────────────────
 st.set_page_config(
@@ -41,6 +44,9 @@ def inject_styles():
         st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
     except FileNotFoundError:
         st.warning("⚠️ File CSS (assets/style.css) tidak ditemukan.")
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.error("Failed to load CSS file %s: %s", css_file_path, exc)
+        st.warning("⚠️ Gagal memuat file CSS.")
 
 # ─────────────────────────────────────────────
 #  KOMPONEN UI (Dari components.py)
@@ -200,9 +206,22 @@ def _send(text: str):
     events = st.session_state.events
     history = st.session_state.chat_history
     history.append(("user", text))
-    resp, chips, needs_fallback = fsm_step(fsm, text, events)
+    try:
+        resp, chips, needs_fallback = fsm_step(fsm, text, events)
+    except Exception as exc:
+        logger.error("fsm_step raised an unexpected error: %s", exc, exc_info=True)
+        resp = ""
+        chips = ["Lihat Event", "Cek Status", "Batal Pendaftaran"]
+        needs_fallback = True
     if needs_fallback or not resp:
-        resp = keyword_fallback(text, events)
+        try:
+            resp = keyword_fallback(text, events)
+        except Exception as exc:
+            logger.error("keyword_fallback raised an unexpected error: %s", exc, exc_info=True)
+            resp = (
+                "⚠️ Maaf, terjadi kesalahan saat memproses pesan Anda.\n\n"
+                "Silakan coba lagi atau ketik **menu** untuk kembali."
+            )
     history.append(("bot", resp))
     st.session_state.chat_chips = chips
 
@@ -210,8 +229,11 @@ def render_chatbot_page():
     _init_chat()
     if "pending_event_idx" in st.session_state:
         idx = st.session_state.pop("pending_event_idx")
-        if st.session_state.fsm.state == State.IDLE: _send("lihat event")
-        _send(str(idx))
+        if not isinstance(idx, int) or idx < 1 or idx > len(st.session_state.events):
+            logger.warning("Invalid pending_event_idx: %r", idx)
+        else:
+            if st.session_state.fsm.state == State.IDLE: _send("lihat event")
+            _send(str(idx))
 
     left, right = st.columns([1, 1.6], gap="large")
     with left:
