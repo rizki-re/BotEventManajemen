@@ -1,8 +1,11 @@
 """
 fsm.py — Data event, konstanta, struktur FSM, dan Metadata State
 """
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
 #  KONSTANTA APLIKASI & DATA (Dari data.py)
@@ -149,17 +152,33 @@ def get_event_by_id(events: list[dict], event_id: str) -> dict | None:
     return next((e for e in events if e["id"] == event_id), None)
 
 def get_event_by_index(events: list[dict], idx: int) -> dict | None:
-    try: return events[idx - 1]
-    except IndexError: return None
+    try:
+        if idx < 1:
+            return None
+        return events[idx - 1]
+    except (IndexError, TypeError) as exc:
+        logger.debug("get_event_by_index failed for idx=%r: %s", idx, exc)
+        return None
 
 def format_price(price: int) -> str:
     return "GRATIS" if price == 0 else f"Rp {price:,.0f}".replace(",", ".")
 
 def quota_pct(event: dict) -> int:
-    return round((event["registered"] / event["quota"]) * 100) if event["quota"] else 0
+    try:
+        quota = event.get("quota", 0)
+        registered = event.get("registered", 0)
+        if not quota:
+            return 0
+        return round((registered / quota) * 100)
+    except (TypeError, ZeroDivisionError) as exc:
+        logger.warning("quota_pct calculation failed: %s", exc)
+        return 0
 
 def is_full(event: dict) -> bool:
-    return event["registered"] >= event["quota"]
+    try:
+        return event.get("registered", 0) >= event.get("quota", 0)
+    except TypeError:
+        return False
 
 # ──────────────────────────────────────────────
 #  FSM STATES & DATA CLASS (Dari engine.py)
